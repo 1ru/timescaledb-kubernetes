@@ -75,10 +75,18 @@ wait-for-example:
 		echo "Waiting for primary pod to become available" ; \
 		sleep 5 ; \
 	done ; \
+	echo "Could not find a PRIMARY pod within 3 minutes, some diagnostics to help you out:" ; \
+	FIRSTPOD="$$(kubectl get pod -l cluster-name=example -o name | head -n 1)" ; \
+	kubectl describe "$${FIRSTPOD}" ; \
+	kubectl logs $${FIRSTPOD} -c timescaledb ; \
 	exit 1
 
 .PHONY: smoketest
 smoketest: wait-for-example
-	@kubectl exec -i $$(kubectl get pod -l cluster-name=example,role=master -o name) -c timescaledb -- \
+	@PRIMARYPOD="$$(kubectl get pod -l cluster-name=example,role=master -o name)" ; \
+	kubectl exec -i "$${PRIMARYPOD}" -c timescaledb -- \
 		psql --no-psqlrc --command \
-		"CREATE SCHEMA IF NOT EXISTS smoketest; DROP TABLE IF EXISTS smoketest.demo; CREATE TABLE smoketest.demo(inserted timestamptz not null); SELECT now() AS smoketest, * FROM create_hypertable('smoketest.demo', 'inserted');"
+		"CREATE SCHEMA IF NOT EXISTS smoketest; DROP TABLE IF EXISTS smoketest.demo; CREATE TABLE smoketest.demo(inserted timestamptz not null); SELECT now() AS smoketest, * FROM create_hypertable('smoketest.demo', 'inserted');" && exit 0 ; \
+	kubectl logs "$${PRIMARYPOD}" -c timescaledb ; \
+	exit 1
+
