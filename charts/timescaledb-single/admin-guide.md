@@ -70,7 +70,7 @@ The following table lists the configurable parameters of the TimescaleDB Helm ch
 | `resources`                       | Any resources you wish to assign to the pod | `{}`                                                |
 | `schedulerName`                   | Alternate scheduler name                    | `nil`                                               |
 | `secretNames.certificate`         | Existing `type:kubernetes.io/tls` secret containing a tls.key and tls.crt | `RELEASE-certificate` |
-| `secretNames.credentials`         | Existing secret that contains env vars that influence Patroni (e.g. PATRONI_SUPERUSER_PASSWORD) | `RELEASE-credentials` | 
+| `secretNames.credentials`         | Existing secret that contains env vars that influence Patroni (e.g. PATRONI_SUPERUSER_PASSWORD) | `RELEASE-credentials` |
 | `secretNames.pgbackrest`          | Existing secret that contains env vars that influence pgBackRest (e.g. PGBACKREST_REPO1_S3_KEY_SECRET) | `RELEASE-pgbackgrest` |
 | `serviceAccount.create`           | If true, create a new service account       | `true`                                              |
 | `serviceAccount.name`             | Service account to be used. If not set and `serviceAccount.create` is `true`, a name is generated using the fullname template | `nil` |
@@ -89,7 +89,7 @@ We've included a helper script `generate_kustomization.sh` to help generate a [k
 * a self-signed SSL certificate (for demo and dev purposes)
 * backup (if enabled)
 
-The script is interactive and (if you wish to enable backups) will ask you to enter your values 
+The script is interactive and (if you wish to enable backups) will ask you to enter your values
 for the pgBackRest S3 config (like bucket, region, endpoint, key and secret).
 It will also ask if you want the script to install the secrets directly.
 
@@ -99,7 +99,7 @@ charts/timescaledb-single/generate_kustomization.sh <release name>
 
 The script can install the secrets immediately, it creates the following secrets:
 
-#### Credentials 
+#### Credentials
 
 This Secret should contain the ENV vars that will influence Patroni. It should at least contain the passwords for the 3 different database users this chart creates: postgres (superuser), admin, and standby (replication). For example, the data of the secret can be:
   ```yaml
@@ -113,13 +113,13 @@ This Secret should contain the ENV vars that will influence Patroni. It should a
 
 This Secret should be of `type: kubernetes.io/tls` with two items: `tls.crt` and `tls.key`. The certificate is used for the database connections.
 
-> **NOTICE**: The `generate_kustomization.sh` script generates self-signed certificates that should 
-only be used for development and demo purposes. 
+> **NOTICE**: The `generate_kustomization.sh` script generates self-signed certificates that should
+only be used for development and demo purposes.
 The certificate should be replaced by a signed certificate, signed by a Certificate Authority (CA) that you trust.
 
-#### pgBackRest 
+#### pgBackRest
 
-This Secret is optional, and required only when backups are enabled (`backup.enabled=true`). 
+This Secret is optional, and required only when backups are enabled (`backup.enabled=true`).
 It should contain the ENV vars that influence pgBackRest (e.g. PGBACKREST_REPO1_S3_KEY_SECRET)
 
 The values in this Secret should specify sensitive variables like S3_KEY and S3_KEY_SECRET.
@@ -141,8 +141,8 @@ Another example, if you want to include encryption of your backups by pgBackRest
     PGBACKREST_REPO1_CIPHER_PASS: <base64 encoded encryption passphrase>
 ```
 
-For a list of all the pgBackRest command configuration options that you can set take a look 
-at: https://pgbackrest.org/command.html#introduction 
+For a list of all the pgBackRest command configuration options that you can set take a look
+at: https://pgbackrest.org/command.html#introduction
   > Any option may be set in an environment variable using the PGBACKREST_ prefix and the option name in all caps replacing - with _, e.g. pg1-path becomes PGBACKREST_PG1_PATH and stanza becomes PGBACKREST_STANZA...
   >
   > ... more at the link
@@ -299,7 +299,7 @@ kubectl create secret generic pgbackrest-bootstrap --from-literal=PGBACKREST_REP
 - Source: test01 in namespace testing
 - Target: test01 in namespace testing
 
-> WARNING: This new deployment will - once the backup is enabled - use the same S3 bucket/path to 
+> WARNING: This new deployment will - once the backup is enabled - use the same S3 bucket/path to
 > write its backup than the previous deployment.
 
 1. Create (or restore) [secrets](#creating-the-secrets) for the new deployment in the `testing` namespace.
