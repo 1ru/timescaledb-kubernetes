@@ -294,6 +294,9 @@ spec:
         - mountPath: {{ template "scripts_dir" . }}
           name: timescaledb-scripts
           readOnly: true
+        - mountPath: {{ template "post_init_dir" . | quote }}
+          name: post-init
+          readOnly: true
         - mountPath: /etc/certificate
           name: certificate
           readOnly: true
@@ -462,6 +465,11 @@ spec:
         emptyDir:
           medium: Memory
       {{- end }}
+      - name: post-init
+        projected:
+          defaultMode: 488 # 0750 permissions
+          sources:
+{{ .Values.postInit | default list | toYaml | indent 12 }}
       - name: pgbouncer
         configMap:
           name: {{ template "timescaledb.fullname" . }}-pgbouncer

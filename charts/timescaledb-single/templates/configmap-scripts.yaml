@@ -332,7 +332,20 @@ data:
     __SQL__
     done
 
-    # We always exit 0 this script, otherwise the database initialization fails.
+    # This directory may contain user defined post init steps
+    for file in $(find {{ template "post_init_dir" . | quote }} -! type d ! -name '.*' | sort)
+    do
+        log "Calling post init script $file"
+        "{{ template "post_init_dir" . }}/$file" "$@"
+        EXITCODE=$?
+        if [ "$EXITCODE" != "0" ]
+        then
+            log "ERROR: post init script $file exited with exitcode $EXITCODE"
+            exit $EXITCODE
+        fi
+    done
+
+    # We exit 0 this script, otherwise the database initialization fails.
     exit 0
   patroni_callback.sh: |
     #!/bin/sh
