@@ -3,6 +3,7 @@ ROGUE_KUSTOMIZE_DIRS := $(shell find charts/timescaledb-single/kustomize/  -mind
 SINGLE_CHART_DIR := charts/timescaledb-single
 CI_SINGLE_DIR := $(SINGLE_CHART_DIR)/ci/
 SINGLE_VALUES_FILES := $(SINGLE_CHART_DIR)/values.yaml $(wildcard $(SINGLE_CHART_DIR)/values/*.yaml)
+DEPLOYMENTS := $(SINGLE_VALUES_FILES)
 
 .PHONY: publish
 publish: publish-multinode publish-single
@@ -44,6 +45,7 @@ refresh-ci-values: clean-ci
 clean-ci:
 	@rm -rf ./$(CI_SINGLE_DIR)
 	@mkdir -p ./$(CI_SINGLE_DIR)/
+	@kubectl delete namespace citest 2>/dev/null || true
 
 .PHONY: shellcheck shellcheck-single
 shellcheck: shellcheck-single
@@ -67,26 +69,32 @@ install-example-secrets:
 install-example: install-example-secrets
 	@helm upgrade --install example $(SINGLE_CHART_DIR) -f $(SINGLE_CHART_DIR)/values.yaml --set replicaCount=2
 
-.PHONY: wait-for-example
-wait-for-example:
-	@for i in $$(seq 1 30); do \
-		PRIMARYPOD="$$(kubectl get pod -l cluster-name=example,role=master -o name)" ; \
-		if [ "$${PRIMARYPOD}" != "" ]; then echo "Primary pod is: $${PRIMARYPOD}"; exit 0; fi ; \
-		echo "Waiting for primary pod to become available" ; \
-		sleep 5 ; \
+smoketest: DEPLOYMENTS = example
+.PHONY: smoketest test-all-single
+smoketest test-all-single:
+	PULL_TIMEOUT=300s INDIVIDUAL_DEPLOYMENT_TIMEOUT=180s ./tests/wait_for_deployments.sh $(DEPLOYMENTS)
+
+.PHONY: install-storageclasses
+install-storageclasses:
+	@for storageclass in gp2 slow fast history; do \
+		kubectl get storageclass/$${storageclass} > /dev/null 2> /dev/null || \
+		kubectl get storageclass -o json \
+			| jq '[.items[] | select(.metadata.annotations."storageclass.kubernetes.io/is-default-class"=="true")] | .[0]' \
+			| jq ". | del(.metadata.annotations.\"storageclass.kubernetes.io/is-default-class\") | .metadata.name=\"$${storageclass}\"" \
+			| kubectl create -f - ; \
 	done ; \
-	echo "Could not find a PRIMARY pod within 3 minutes, some diagnostics to help you out:" ; \
-	FIRSTPOD="$$(kubectl get pod -l cluster-name=example -o name | head -n 1)" ; \
-	kubectl describe "$${FIRSTPOD}" ; \
-	kubectl logs $${FIRSTPOD} -c timescaledb ; \
-	exit 1
+	exit 0
 
-.PHONY: smoketest
-smoketest: wait-for-example
-	@PRIMARYPOD="$$(kubectl get pod -l cluster-name=example,role=master -o name)" ; \
-	kubectl exec -i "$${PRIMARYPOD}" -c timescaledb -- \
-		psql --no-psqlrc --command \
-		"CREATE SCHEMA IF NOT EXISTS smoketest; DROP TABLE IF EXISTS smoketest.demo; CREATE TABLE smoketest.demo(inserted timestamptz not null); SELECT now() AS smoketest, * FROM create_hypertable('smoketest.demo', 'inserted');" && exit 0 ; \
-	kubectl logs "$${PRIMARYPOD}" -c timescaledb ; \
-	exit 1
+.PHONY: citest
+citest:
+	@kubectl create namespace citest || true
+	@kubectl config set-context --current --namespace citest
+	$(MAKE) install-all-single
+	$(MAKE) test-all-single
 
+.PHONY: install-all-single
+install-all-single: install-example-secrets install-storageclasses
+	@for vfile in $(SINGLE_VALUES_FILES); do \
+		deployment="$$(basename $${vfile%".yaml"} | tr '.' '-' | tr '_' '-')" ; \
+		helm upgrade --install $${deployment} $(SINGLE_CHART_DIR) -f $${vfile} -f tests/values.yaml ; \
+	done

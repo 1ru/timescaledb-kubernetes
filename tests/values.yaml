@@ -1,0 +1,24 @@
+replicaCount: 2
+secretNames:
+  credentials: example-credentials
+  certificate: example-certificate
+  pgbackrest: example-pgbackrest
+
+patroni:
+  postgresql:
+    parameters:
+      shared_buffers: 4MB # We're not testing Postgres, we're testing the Charts
+
+persistentVolumes:
+  data:
+    size: 1G
+  wal:
+    size: 1G
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

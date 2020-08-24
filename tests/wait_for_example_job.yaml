@@ -1,0 +1,80 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: example
+spec:
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      name: example
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: waiter
+        image: timescaledev/timescaledb-ha:pg12-ts1.7-latest
+        resources:
+          limits:
+            cpu: 100m
+            memory: 24Mi
+          requests:
+            cpu: 100m
+            memory: 24Mi
+        env:
+        - {name: TEST_REPLICA, value: "1"}
+        - name: PGHOST
+          value: example
+        - name: PGUSER
+          value: postgres
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: example-credentials
+              key: PATRONI_SUPERUSER_PASSWORD
+        command:
+        - /bin/sh
+        - '-c'
+        - |
+          terminate() {
+              exit 1
+          }
+          trap terminate TERM QUIT
+
+          NOW="$(date --iso-8601=seconds)"
+          psql -X -f - --set ON_ERROR_STOP=1 <<__SQL__
+              \x on
+              CREATE SCHEMA IF NOT EXISTS citest;
+              DROP TABLE IF EXISTS citest.demo;
+              CREATE TABLE citest.demo(inserted timestamptz not null);
+              SELECT * FROM create_hypertable('citest.demo', 'inserted');
+              INSERT INTO citest.demo VALUES ('${NOW}');
+          __SQL__
+          EXITCODE=$?
+          if [ "${EXITCODE}" -ne 0 ]; then exit "${EXITCODE}"; fi
+
+          if [ "${TEST_REPLICA}" -ne 1 ]; then
+              exit 0
+          fi 
+          
+          export PGHOST="${PGHOST}-replica"
+          while ! pg_isready; do
+              echo "Waiting for ${PGHOST} replica to become available"
+              sleep 3
+          done
+
+          psql -X -f - --set ON_ERROR_STOP=1 <<__SQL__
+              \x on
+              SELECT * FROM pg_stat_wal_receiver;
+              SELECT * FROM citest.demo WHERE inserted = '${NOW}';
+              SELECT count(*) = 1 AS replica_ok FROM citest.demo WHERE inserted = '${NOW}'
+              \gset
+              \if :replica_ok
+                  SELECT 'Replica caught up with primary';
+              \else
+                  SELECT 'Could not find the test record on the replica';
+                  SELECT 1/0; -- this will cause the script to exit with a failure
+              \endif
+          __SQL__
+          EXITCODE=$?
+          if [ "${EXITCODE}" -ne 0 ]; then exit "${EXITCODE}"; fi
+
+          echo "Everything seems fine with deployment ${PGHOST}"

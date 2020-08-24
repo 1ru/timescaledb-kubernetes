@@ -1,4 +1,4 @@
-name: "Helm Lint"
+name: "Smoke Test"
 on:
 - push
 
@@ -39,14 +39,6 @@ jobs:
         id: install-helm
         if: steps.lint.outputs.changed == 'true'
 
-      - name: Install a cluster
-        run: make install-example
-        if: steps.lint.outputs.changed == 'true'
-
-      - name: Wait for a primary to be available
-        run: make wait-for-example
-        if: steps.lint.outputs.changed == 'true'
-
-      - name: Verify that we can create a hypertable
-        run: make smoketest
+      - name: Test all available values files clusters
+        run: make citest
         if: steps.lint.outputs.changed == 'true'
